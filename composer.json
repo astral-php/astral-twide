@@ -1,0 +1,56 @@
+{
+    "name": "astral-php/astral-twide",
+    "description": "Moteur de templates compilé et composant optionnel d’intégration pour Astral PHP.",
+    "type": "library",
+    "version": "0.1.0",
+    "license": "MIT",
+    "keywords": [
+        "astral",
+        "php",
+        "template",
+        "view",
+        "compiler",
+        "twide"
+    ],
+    "authors": [
+        {
+            "name": "astral-php",
+            "homepage": "https://github.com/astral-php"
+        }
+    ],
+    "homepage": "https://github.com/astral-php/astral-twide",
+    "support": {
+        "source": "https://github.com/astral-php/astral-twide",
+        "issues": "https://github.com/astral-php/astral-twide/issues"
+    },
+    "require": {
+        "php": "^8.3",
+        "astral-php/astral-core": "^2.0",
+        "astral-php/astral-utilities": "^0.1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5 || ^11.0"
+    },
+    "suggest": {
+        "ext-mbstring": "Requis pour le filtre truncate de UtilitiesExtension"
+    },
+    "autoload": {
+        "psr-4": {
+            "Astral\\Twide\\": "src/Astral/Twide/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Astral\\Twide\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}
