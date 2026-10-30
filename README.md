@@ -1,13 +1,13 @@
 # astral-twide
 
-[![PHP](https://img.shields.io/badge/PHP-%5E8.3-777BB4?logo=php&logoColor=white)](composer.json)
-[![Version](https://img.shields.io/badge/version-0.1.0--dev-blue)](CHANGELOG.md)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-PHPUnit-brightgreen)](phpunit.xml)
+[![PHP](https://img.shields.io/badge/PHP-8.3%2B-777BB4?logo=php&logoColor=white)](https://www.php.net)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-PHPUnit%20OK-9933CC)](phpunit.xml)
 
 Moteur de templates **compilé**, extensible, **opt-in** pour Astral MVC. Syntaxe dédiée (`.twide`) — les apps officielles Astral restent sur les vues PHP natives.
 
-> **Phase A** — industrialisation feuille 2.x (`PHP ^8.3`, `astral-core ^2`). Push GitHub **sans tag** Packagist tant que le moteur n’est pas figé pour 1.0.
+> **0.1.0** — feuille 2.x (`PHP ^8.3`, `astral-core ^2`). Packagist : `composer require astral-php/astral-twide`.
 
 - Paquet : `astral-php/astral-twide`
 - Namespace : `Astral\Twide\`
@@ -35,7 +35,11 @@ Moteur de templates **compilé**, extensible, **opt-in** pour Astral MVC. Syntax
 composer require astral-php/astral-twide:@dev
 ```
 
-**Packagist** (après tag / publication) : `composer require astral-php/astral-twide`.
+**Packagist :**
+
+```bash
+composer require astral-php/astral-twide
+```
 
 Développement du dépôt :
 
