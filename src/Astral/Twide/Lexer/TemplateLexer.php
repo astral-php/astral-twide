@@ -25,8 +25,8 @@ final class TemplateLexer
         'endcomponent', 'endforelse', 'endforeach', 'endsection', 'endswitch',
         'endisset', 'endempty', 'endwhile', 'endpush', 'endslot', 'endfor', 'endif',
         'component', 'foreach', 'forelse', 'extends', 'section', 'default', 'elseif',
-        'continue', 'include', 'switch', 'isset', 'empty', 'while', 'break', 'else',
-        'case', 'push', 'slot', 'stack', 'yield', 'for', 'if', 'set',
+        'continue', 'endscope', 'include', 'switch', 'isset', 'empty', 'while', 'break',
+        'else', 'case', 'push', 'slot', 'stack', 'yield', 'scope', 'each', 'for', 'if', 'set',
     ];
 
     /** @return list<Token> */

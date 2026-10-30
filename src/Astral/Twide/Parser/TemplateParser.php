@@ -84,10 +84,11 @@ final class TemplateParser
             'empty' => $this->parseEmpty($argument, $token),
             'switch' => $this->parseSwitch($argument, $token),
             'set' => $this->parseSet($argument, $token),
+            'scope' => $this->parseScope($argument, $token),
             'break' => $this->parseBreak($token),
             'continue' => $this->parseContinue($token),
             'else', 'elseif', 'endif', 'endfor', 'endforeach', 'endforelse', 'endwhile',
-            'endisset', 'endempty', 'case', 'default', 'endswitch'
+            'endisset', 'endempty', 'endscope', 'case', 'default', 'endswitch'
                 => throw $this->error('Unexpected directive @' . $name . '.', $token),
             default => throw $this->error('Unknown directive @' . $name . '.', $token),
         };
@@ -417,6 +418,29 @@ final class TemplateParser
             'type' => 'set',
             'variable' => $match[1],
             'expression' => $this->expressions->parse(trim($match[2])),
+            'token' => $token,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function parseScope(string $argument, Token $token): array
+    {
+        if ($argument === '') {
+            throw $this->error(
+                '@scope requires an expression (produced by @include … with …).',
+                $token
+            );
+        }
+        $expression = $this->expressions->parse($argument);
+        [$body, $stop] = $this->parseNodes(['endscope']);
+        if ($stop === null || $stop['name'] !== 'endscope') {
+            throw $this->error('Missing @endscope for @scope.', $token);
+        }
+
+        return [
+            'type' => 'scope',
+            'expression' => $expression,
+            'body' => $body,
             'token' => $token,
         ];
     }

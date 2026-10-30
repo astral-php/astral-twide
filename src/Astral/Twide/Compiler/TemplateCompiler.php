@@ -70,6 +70,7 @@ final class TemplateCompiler
                 'continue' => "continue;\n",
                 'set' => '$__twide_context[' . var_export($node['variable'], true) . '] = '
                     . $this->expressionCompiler->compile($node['expression']) . ";\n",
+                'scope' => $this->compileScope($node),
                 default => throw new TwideException('Unsupported template node "' . $node['type'] . '".'),
             };
         }
@@ -210,6 +211,22 @@ final class TemplateCompiler
         $code .= $this->indent($this->compileNodes($node['body']), 1);
         $code .= "}\n";
         $code .= $this->restoreContextVars($id, $loopName, null);
+
+        return $code;
+    }
+
+    /** @param array<string, mixed> $node */
+    private function compileScope(array $node): string
+    {
+        $id = ++$this->temporaryCounter;
+        $saved = '$__twide_scope_saved_' . $id;
+        $code = $saved . ' = $__twide_runtime->pushScope($__twide_context, '
+            . $this->expressionCompiler->compile($node['expression']) . ");\n";
+        $code .= "try {\n";
+        $code .= $this->indent($this->compileNodes($node['body']), 1);
+        $code .= "} finally {\n";
+        $code .= '    $__twide_runtime->popScope($__twide_context, ' . $saved . ");\n";
+        $code .= "}\n";
 
         return $code;
     }

@@ -22,7 +22,7 @@ final class ExpressionCompiler
             'get' => '$__twide_runtime->get(' . $this->compile($node['target']) . ', ' . $this->compile($node['key']) . ')',
             'call' => '$__twide_runtime->callFunction(' . var_export($node['name'], true) . ', [' . $this->compileList($node['args']) . '])',
             'filter' => '$__twide_runtime->applyFilter(' . var_export($node['name'], true) . ', ' . $this->compile($node['value']) . ', [' . $this->compileList($node['args']) . '])',
-            'array' => '[' . $this->compileList($node['items']) . ']',
+            'array' => $this->compileArray($node),
             'unary' => '(' . $node['operator'] . $this->compile($node['value']) . ')',
             'binary' => $this->compileBinary($node),
             'ternary' => '(' . $this->compile($node['condition']) . ' ? ' . $this->compile($node['yes']) . ' : ' . $this->compile($node['no']) . ')',
@@ -34,6 +34,26 @@ final class ExpressionCompiler
     private function compileList(array $nodes): string
     {
         return implode(', ', array_map(fn (array $node): string => $this->compile($node), $nodes));
+    }
+
+    /** @param array<string, mixed> $node */
+    private function compileArray(array $node): string
+    {
+        $parts = [];
+        foreach ($node['items'] as $item) {
+            // Legacy list items were bare expression nodes.
+            if (isset($item['type'])) {
+                $parts[] = $this->compile($item);
+                continue;
+            }
+            if ($item['key'] === null) {
+                $parts[] = $this->compile($item['value']);
+            } else {
+                $parts[] = $this->compile($item['key']) . ' => ' . $this->compile($item['value']);
+            }
+        }
+
+        return '[' . implode(', ', $parts) . ']';
     }
 
     /**

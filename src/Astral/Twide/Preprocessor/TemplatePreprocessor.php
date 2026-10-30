@@ -14,22 +14,28 @@ use Astral\Twide\Loader\TemplateLoader;
  *   @extends('layouts/base')
  *   @section('content') ... @endsection
  *   @yield('content')
- *   @yield('content', 'fallback')
  *   @include('partials/card')
+ *   @include('partials/card' with dataExpr)
+ *   @each('partial', items, 'item'[, empty])
+ *   @component / @slot / @push / @stack
  *
- * Template names and section names are intentionally static string literals.
+ * Template names for composition are static string literals (security).
+ * `@include … with` is rewritten to `@scope(expr)…@endscope` around the
+ * expanded partial so the compiler merges context at runtime.
  */
 final class TemplatePreprocessor
 {
     private const MAX_DEPTH = 32;
 
+    private DirectiveArgumentSplitter $arguments;
+
     public function __construct(private readonly TemplateLoader $loader)
     {
+        $this->arguments = new DirectiveArgumentSplitter();
     }
 
     public function process(string $template, string $source): string
     {
-        // Comments must not trigger composition directives during preprocessing.
         $source = preg_replace('/\\{\\{--.*?--\\}\\}/s', '', $source) ?? $source;
         $expanded = $this->expand($template, $source, [], [], 0);
         return $this->resolveStacks($expanded);
@@ -58,7 +64,6 @@ final class TemplatePreprocessor
         $extends = $this->extractSingleNameDirective($source, 'extends');
         $sections = $inheritedSections;
 
-        // Child sections are already present in $inheritedSections and take precedence.
         if (preg_match_all('/@section\s*\(\s*([\'"])([A-Za-z_][A-Za-z0-9_.-]*)\1\s*\)(.*?)@endsection/s', $source, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 if (!array_key_exists($match[2], $sections)) {
@@ -71,10 +76,8 @@ final class TemplatePreprocessor
             return $this->expand($extends, $this->loader->load($extends), $sections, $stack, $depth + 1);
         }
 
-        // Sections are definitions; remove their wrappers and bodies from ordinary output.
         $source = preg_replace('/@section\s*\(\s*([\'"])([A-Za-z_][A-Za-z0-9_.-]*)\1\s*\).*?@endsection/s', '', $source) ?? $source;
 
-        // Replace yields first so includes declared inside a section are expanded as well.
         $source = preg_replace_callback(
             '/@yield\s*\(\s*([\'"])([A-Za-z_][A-Za-z0-9_.-]*)\1\s*(?:,\s*([\'"])(.*?)\3\s*)?\)/s',
             static function (array $match) use ($sections): string {
@@ -84,27 +87,13 @@ final class TemplatePreprocessor
             $source
         ) ?? $source;
 
-        // Expand includes recursively. The same render context is shared with included templates.
-        $source = preg_replace_callback(
-            '/@include\s*\(\s*([\'"])([^\'"]+)\1\s*\)/',
-            function (array $match) use ($stack, $depth, $sections): string {
-                $name = trim($match[2]);
-                if ($name === '') {
-                    throw new TwideException('The @include directive requires a template name.');
-                }
-                if (in_array($name, $stack, true)) {
-                    $chain = $stack;
-                    $chain[] = $name;
-                    throw new TwideException('Circular template inclusion detected: ' . implode(' -> ', $chain) . '.');
-                }
-                return $this->expand($name, $this->loader->load($name), $sections, $stack, $depth + 1);
-            },
-            $source
-        ) ?? $source;
+        // @each → @forelse + @include (+ empty) before include expansion.
+        $source = $this->rewriteEachDirectives($source);
 
+        $source = $this->expandIncludes($source, $stack, $depth, $sections);
         $source = $this->expandComponents($source, $stack, $depth, $sections);
 
-        if (preg_match('/@(?:extends|section|endsection|yield|include|component|endcomponent|slot|endslot)\b/', $source, $unknown)) {
+        if (preg_match('/@(?:extends|section|endsection|yield|include|each|component|endcomponent|slot|endslot)(?![a-z])/', $source, $unknown)) {
             throw new TwideException('Unresolved template composition directive "' . $unknown[0] . '".');
         }
 
@@ -112,53 +101,160 @@ final class TemplatePreprocessor
     }
 
     /**
-     * Collect pushed content from the fully expanded template, then render each
-     * stack placeholder. This final pass lets pushes inside sections, includes
-     * and components contribute to a stack declared in the layout.
-     *
-     * @return string
+     * @param list<string> $stack
+     * @param array<string, string> $sections
      */
-    private function resolveStacks(string $source): string
+    private function expandIncludes(string $source, array $stack, int $depth, array $sections): string
     {
-        /** @var array<string, list<string>> $stacks */
-        $stacks = [];
-        // Directives end before uppercase/content (e.g. @endpushWidget → @endpush + Widget).
-        // Lowercase continuation keeps a longer unknown token (@endpushes) unmatched.
-        $pushOpenCount = preg_match_all('/@push\s*\(/', $source);
-        $pushCloseCount = preg_match_all('/@endpush(?![a-z])/', $source);
-        if ($pushOpenCount !== $pushCloseCount) {
-            throw new TwideException('Every @push directive must have a matching @endpush.');
-        }
-        $source = preg_replace_callback(
-            '/@push\s*\(\s*([\'"])([A-Za-z_][A-Za-z0-9_.-]*)\1\s*\)(.*?)@endpush(?![a-z])/s',
-            static function (array $match) use (&$stacks): string {
-                $stacks[$match[2]][] = $match[3];
-                return '';
-            },
-            $source
-        ) ?? $source;
+        $offset = 0;
+        $length = strlen($source);
+        $output = '';
 
-        $source = preg_replace_callback(
-            '/@stack\s*\(\s*([\'"])([A-Za-z_][A-Za-z0-9_.-]*)\1\s*\)/',
-            static function (array $match) use ($stacks): string {
-                return implode('', $stacks[$match[2]] ?? []);
-            },
-            $source
-        ) ?? $source;
+        while ($offset < $length) {
+            if (!preg_match('/@include\s*\(/', $source, $match, PREG_OFFSET_CAPTURE, $offset)) {
+                $output .= substr($source, $offset);
+                break;
+            }
 
-        if (preg_match('/@(?:push|endpush|stack)(?![a-z])/', $source, $unknown)) {
-            throw new TwideException('Unresolved content stack directive "' . $unknown[0] . '".');
+            $start = $match[0][1];
+            $openParen = $start + strlen($match[0][0]) - 1;
+            $close = $this->findBalancedParenthesis($source, $openParen);
+            if ($close === null) {
+                throw new TwideException('Unclosed argument list for @include.');
+            }
+
+            $output .= substr($source, $offset, $start - $offset);
+            $inner = trim(substr($source, $openParen + 1, $close - $openParen - 1));
+            $output .= $this->expandOneInclude($inner, $stack, $depth, $sections);
+            $offset = $close + 1;
         }
 
-        return $source;
+        return $output;
     }
 
     /**
-     * Expand @component('name') ... @endcomponent blocks.
-     *
-     * Named slot blocks use @slot('name') ... @endslot. The remaining body
-     * becomes the default "slot". Component and slot names must be literals.
-     *
+     * @param list<string> $stack
+     * @param array<string, string> $sections
+     */
+    private function expandOneInclude(string $inner, array $stack, int $depth, array $sections): string
+    {
+        $withExpr = null;
+        $namePart = $inner;
+        if (preg_match('/^(.+?)\s+with\s+(.+)$/s', $inner, $parts)) {
+            $namePart = trim($parts[1]);
+            $withExpr = trim($parts[2]);
+            if ($withExpr === '') {
+                throw new TwideException(
+                    'Invalid @include with syntax. Expected @include(\'partial\' with expression).'
+                );
+            }
+        }
+
+        if (!preg_match('/^([\'"])([^\'"]+)\1$/', $namePart, $nameMatch)) {
+            throw new TwideException(
+                'Twide: @include template name must be a static quoted string (got "' . $namePart . '").'
+            );
+        }
+
+        $name = trim($nameMatch[2]);
+        if ($name === '') {
+            throw new TwideException('The @include directive requires a template name.');
+        }
+        if (in_array($name, $stack, true)) {
+            $chain = $stack;
+            $chain[] = $name;
+            throw new TwideException('Circular template inclusion detected: ' . implode(' -> ', $chain) . '.');
+        }
+
+        $expanded = $this->expand($name, $this->loader->load($name), $sections, $stack, $depth + 1);
+        if ($withExpr === null) {
+            return $expanded;
+        }
+
+        return '@scope(' . $withExpr . ')' . $expanded . '@endscope';
+    }
+
+    private function rewriteEachDirectives(string $source): string
+    {
+        $offset = 0;
+        $length = strlen($source);
+        $output = '';
+
+        while ($offset < $length) {
+            if (!preg_match('/@each\s*\(/', $source, $match, PREG_OFFSET_CAPTURE, $offset)) {
+                $output .= substr($source, $offset);
+                break;
+            }
+
+            $start = $match[0][1];
+            $openParen = $start + strlen($match[0][0]) - 1;
+            $close = $this->findBalancedParenthesis($source, $openParen);
+            if ($close === null) {
+                throw new TwideException('Unclosed argument list for @each.');
+            }
+
+            $output .= substr($source, $offset, $start - $offset);
+            $inner = trim(substr($source, $openParen + 1, $close - $openParen - 1));
+            $output .= $this->compileEachRewrite($inner);
+            $offset = $close + 1;
+        }
+
+        return $output;
+    }
+
+    private function compileEachRewrite(string $inner): string
+    {
+        $args = $this->arguments->split($inner);
+        if (count($args) < 3 || count($args) > 4) {
+            throw new TwideException(
+                'Twide: @each expects @each(\'template\', items, \'itemName\'[, empty]).'
+            );
+        }
+
+        if (!preg_match('/^([\'"])([^\'"]+)\1$/', $args[0], $tpl)) {
+            throw new TwideException('Twide: @each template name must be a static quoted string.');
+        }
+        $template = $tpl[2];
+        $items = $args[1];
+
+        if (!preg_match('/^([\'"])([A-Za-z_][A-Za-z0-9_]*)\1$/', $args[2], $item)) {
+            throw new TwideException(
+                'Twide: @each item name must be a quoted identifier (e.g. \'user\').'
+            );
+        }
+        $itemName = $item[2];
+        if ($itemName === 'loop') {
+            throw new TwideException('Twide: @each item name cannot be the reserved name "loop".');
+        }
+
+        $emptyBranch = '';
+        if (isset($args[3])) {
+            $emptyBranch = $this->compileEachEmpty($args[3]);
+        }
+
+        return '@forelse(' . $items . ' as ' . $itemName . ')'
+            . '@include(\'' . str_replace(['\\', '\''], ['\\\\', '\\\''], $template) . '\')'
+            . '@empty'
+            . $emptyBranch
+            . '@endforelse';
+    }
+
+    private function compileEachEmpty(string $emptyArg): string
+    {
+        $emptyArg = trim($emptyArg);
+        if (preg_match('/^([\'"])raw\|(.*)\1$/s', $emptyArg, $raw)) {
+            return htmlspecialchars($raw[2], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        }
+        if (preg_match('/^([\'"])([^\'"]+)\1$/', $emptyArg, $tpl)) {
+            return '@include(\'' . str_replace(['\\', '\''], ['\\\\', '\\\''], $tpl[2]) . '\')';
+        }
+
+        throw new TwideException(
+            'Twide: @each empty argument must be a quoted template name or \'raw|literal text\'.'
+        );
+    }
+
+    /**
      * @param list<string> $stack
      * @param array<string, string> $sections
      */
@@ -239,6 +335,39 @@ final class TemplatePreprocessor
         return $output;
     }
 
+    private function resolveStacks(string $source): string
+    {
+        /** @var array<string, list<string>> $stacks */
+        $stacks = [];
+        $pushOpenCount = preg_match_all('/@push\s*\(/', $source);
+        $pushCloseCount = preg_match_all('/@endpush(?![a-z])/', $source);
+        if ($pushOpenCount !== $pushCloseCount) {
+            throw new TwideException('Every @push directive must have a matching @endpush.');
+        }
+        $source = preg_replace_callback(
+            '/@push\s*\(\s*([\'"])([A-Za-z_][A-Za-z0-9_.-]*)\1\s*\)(.*?)@endpush(?![a-z])/s',
+            static function (array $match) use (&$stacks): string {
+                $stacks[$match[2]][] = $match[3];
+                return '';
+            },
+            $source
+        ) ?? $source;
+
+        $source = preg_replace_callback(
+            '/@stack\s*\(\s*([\'"])([A-Za-z_][A-Za-z0-9_.-]*)\1\s*\)/',
+            static function (array $match) use ($stacks): string {
+                return implode('', $stacks[$match[2]] ?? []);
+            },
+            $source
+        ) ?? $source;
+
+        if (preg_match('/@(?:push|endpush|stack)(?![a-z])/', $source, $unknown)) {
+            throw new TwideException('Unresolved content stack directive "' . $unknown[0] . '".');
+        }
+
+        return $source;
+    }
+
     private function extractSingleNameDirective(string $source, string $directive): ?string
     {
         $pattern = '/@' . preg_quote($directive, '/') . '\s*\(\s*([\'"])([^\'"]+)\1\s*\)/';
@@ -254,5 +383,37 @@ final class TemplatePreprocessor
             throw new TwideException('@' . $directive . ' must appear before template output.');
         }
         return trim($matches[2][0]);
+    }
+
+    private function findBalancedParenthesis(string $source, int $open): ?int
+    {
+        $depth = 0;
+        $quote = null;
+        $escaped = false;
+        $length = strlen($source);
+        for ($i = $open; $i < $length; $i++) {
+            $char = $source[$i];
+            if ($quote !== null) {
+                if ($escaped) {
+                    $escaped = false;
+                } elseif ($char === '\\') {
+                    $escaped = true;
+                } elseif ($char === $quote) {
+                    $quote = null;
+                }
+                continue;
+            }
+            if ($char === '"' || $char === "'") {
+                $quote = $char;
+            } elseif ($char === '(') {
+                $depth++;
+            } elseif ($char === ')') {
+                $depth--;
+                if ($depth === 0) {
+                    return $i;
+                }
+            }
+        }
+        return null;
     }
 }

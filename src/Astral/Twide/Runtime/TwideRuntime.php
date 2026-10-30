@@ -71,6 +71,58 @@ final class TwideRuntime
         return empty($value);
     }
 
+    /**
+     * Merge array/object public properties into the render context.
+     * Returns a restore map for {@see popScope()}.
+     *
+     * @param array<string, mixed> $context
+     * @return array<string, array{exists:bool,value:mixed}>
+     */
+    public function pushScope(array &$context, mixed $data): array
+    {
+        if (is_object($data)) {
+            $data = get_object_vars($data);
+        }
+        if (!is_array($data)) {
+            throw new TwideException(
+                '@include with / @scope requires an array or an object with public properties.'
+            );
+        }
+
+        $saved = [];
+        foreach ($data as $key => $value) {
+            if (!is_string($key) && !is_int($key)) {
+                continue;
+            }
+            $name = (string) $key;
+            if ($name === '' || $name === 'loop') {
+                continue;
+            }
+            $saved[$name] = [
+                'exists' => array_key_exists($name, $context),
+                'value' => $context[$name] ?? null,
+            ];
+            $context[$name] = $value;
+        }
+
+        return $saved;
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     * @param array<string, array{exists:bool,value:mixed}> $saved
+     */
+    public function popScope(array &$context, array $saved): void
+    {
+        foreach ($saved as $name => $info) {
+            if ($info['exists']) {
+                $context[$name] = $info['value'];
+            } else {
+                unset($context[$name]);
+            }
+        }
+    }
+
     /** @param list<mixed> $arguments */
     public function callFunction(string $name, array $arguments): mixed
     {

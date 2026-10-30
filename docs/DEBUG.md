@@ -26,3 +26,9 @@ Exemples :
 |-------|------|
 | `@empty(expr) … @endempty` | Test « vide » standalone |
 | `@forelse … @empty … @endforelse` | Branche vide du `@forelse` (directive **sans** arguments) |
+
+## Includes
+
+- `@include('partial')` — nom **statique** uniquement (sécurité).
+- `@include('partial' with expr)` — fusion runtime du tableau / propriétés publiques dans le contexte, puis restauration.
+- `@each('partial', items, 'item'[, empty])` — sugar `@forelse` + include ; `empty` = autre template ou `'raw|texte'` (échappé HTML).

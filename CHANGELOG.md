@@ -1,6 +1,6 @@
 # Changelog — astral-twide
 
-## [0.1.0-dev] — complément (P1–P4, sans tag)
+## [0.1.0-dev] — complément (P1–P5, sans tag)
 
 ### Added
 
@@ -8,8 +8,10 @@
 - Directives : `@isset`, `@empty`/`@endempty`, `@switch`/`@case`/`@default`, `@break`/`@continue` (boucles)
 - Boucles : `@foreach`, `@forelse`, `@for(i in start count n)`, `@while`
 - `@set(name = expr)`
+- `@include('x' with expr)` (scope runtime) · `@each('x', items, 'item'[, empty|raw|…])`
+- Tableaux associatifs d’expressions `['k' => v]`
 - Messages d’erreur localisés : `Twide: … (template "…", line N, column M)`
-- Lexer : matching des directives connues (plus long préfixe) pour `@emptyNONE`, etc.
+- Lexer : matching des directives connues (plus long préfixe)
 - Docs : `DEBUG.md`, extensions app + tests PHPUnit conseillés
 
 ### Changed

@@ -47,7 +47,7 @@ final class ExpressionParser
         $tokens = [];
         $length = strlen($source);
         $i = 0;
-        $multi = ['===', '!==', '??', '==', '!=', '<=', '>=', '&&', '||', '**'];
+        $multi = ['===', '!==', '??', '==', '!=', '<=', '>=', '&&', '||', '**', '=>'];
         while ($i < $length) {
             if (ctype_space($source[$i])) {
                 $i++;
@@ -164,7 +164,18 @@ final class ExpressionParser
             $items = [];
             if (!$this->accept(']')) {
                 do {
-                    $items[] = $this->parseExpression(0);
+                    $first = $this->parseExpression(0);
+                    if ($this->accept('=>')) {
+                        $items[] = [
+                            'key' => $first,
+                            'value' => $this->parseExpression(0),
+                        ];
+                    } else {
+                        $items[] = [
+                            'key' => null,
+                            'value' => $first,
+                        ];
+                    }
                 } while ($this->accept(','));
                 $this->expect(']');
             }
