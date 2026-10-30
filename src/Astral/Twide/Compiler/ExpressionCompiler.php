@@ -36,6 +36,22 @@ final class ExpressionCompiler
         return implode(', ', array_map(fn (array $node): string => $this->compile($node), $nodes));
     }
 
+    /**
+     * Compile an expression as a safe isset() check (defined and not null).
+     *
+     * @param array<string, mixed> $node
+     */
+    public function compileIsset(array $node): string
+    {
+        return match ($node['type'] ?? null) {
+            'variable' => '$__twide_runtime->issetValue($__twide_context, ' . var_export($node['name'], true) . ')',
+            'get' => '$__twide_runtime->issetGet(' . $this->compile($node['target']) . ', ' . $this->compile($node['key']) . ')',
+            default => throw new TwideException(
+                '@isset only accepts a variable or property/index path (e.g. user, user.name, users[0]).'
+            ),
+        };
+    }
+
     /** @param array<string, mixed> $node */
     private function compileBinary(array $node): string
     {

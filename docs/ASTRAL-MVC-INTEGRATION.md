@@ -40,13 +40,24 @@ return [
     'twide' => [
         'views' => BASE_PATH . '/views',
         'cache' => BASE_PATH . '/storage/cache/views',
+        'extension' => '.twide',
+        'extensions' => [
+            // \App\Twide\ShopExtension::class,
+        ],
     ],
 ];
 ```
 
-En usage standard, il est préférable de laisser les valeurs par défaut du provider. Le dossier de cache est créé automatiquement au premier rendu si le processus PHP a les droits nécessaires.
+| Clé | Défaut | Rôle |
+|-----|--------|------|
+| `views` | `BASE_PATH/views` | Racine des templates |
+| `cache` | `BASE_PATH/storage/cache/views` | Cache compilé |
+| `extension` | `.twide` | Suffixe des fichiers |
+| `extensions` | `[]` | FQCN `ExtensionInterface` applicatifs |
 
-Le provider enregistre les services `Astral\Twide\Twide`, `TemplateEngineInterface` et `TwideViewAdapter` en singleton. Il ajoute également `UtilitiesExtension` afin que les fonctions et filtres documentés par cette extension soient disponibles dans les vues Twide.
+En usage standard, les défauts suffisent. Le dossier de cache est créé au premier rendu si le processus PHP a les droits nécessaires.
+
+Le provider enregistre `Twide`, `TemplateEngineInterface` et `TwideViewAdapter` en singleton, active `UtilitiesExtension`, puis charge chaque entrée de `twide.extensions` (résolution container + contrôle `instanceof ExtensionInterface`). Voir [`EXTENSIONS.md`](EXTENSIONS.md).
 
 ## Utilisation depuis un contrôleur Astral 2.x
 

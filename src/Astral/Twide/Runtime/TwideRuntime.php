@@ -41,6 +41,36 @@ final class TwideRuntime
         return null;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
+    public function issetValue(array $context, string $name): bool
+    {
+        return array_key_exists($name, $context) && $context[$name] !== null;
+    }
+
+    public function issetGet(mixed $target, mixed $key): bool
+    {
+        if (is_array($target)) {
+            return (is_int($key) || is_string($key))
+                && array_key_exists($key, $target)
+                && $target[$key] !== null;
+        }
+
+        if (is_object($target) && is_string($key)) {
+            $properties = get_object_vars($target);
+
+            return array_key_exists($key, $properties) && $properties[$key] !== null;
+        }
+
+        return false;
+    }
+
+    public function isEmpty(mixed $value): bool
+    {
+        return empty($value);
+    }
+
     /** @param list<mixed> $arguments */
     public function callFunction(string $name, array $arguments): mixed
     {

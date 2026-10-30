@@ -1,13 +1,21 @@
 # Changelog — astral-twide
 
-## [0.1.0-dev] — Phase A (industrialisation, sans tag)
+## [0.1.0-dev] — complément (P1–P4, sans tag)
+
+### Added
+
+- Config `twide.views` / `cache` / `extension` / `extensions` (FQCN) via `TwideServiceProvider`
+- Directives : `@isset`, `@empty`/`@endempty`, `@switch`/`@case`/`@default`, `@break`/`@continue` (boucles)
+- Boucles : `@foreach`, `@forelse`, `@for(i in start count n)`, `@while`
+- `@set(name = expr)`
+- Messages d’erreur localisés : `Twide: … (template "…", line N, column M)`
+- Lexer : matching des directives connues (plus long préfixe) pour `@emptyNONE`, etc.
+- Docs : `DEBUG.md`, extensions app + tests PHPUnit conseillés
 
 ### Changed
 
 - Cible feuille 2.x : PHP `^8.3`, `astral-php/astral-core` `^2.0`
-- Scaffold officiel : `components-astral/astral-twide` (depuis DT `code/`)
-- Docs produit sous `docs/` (guide vues, intégration MVC, security, extensions)
-- README badges + compatibilité 2.x
+- Scaffold officiel : `components-astral/astral-twide`
 
 ### Inherited from prototype (phases 6–13)
 

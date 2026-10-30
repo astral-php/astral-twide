@@ -13,9 +13,23 @@ use Astral\Twide\Exceptions\TwideException;
  */
 final class TemplateLexer
 {
-    /** @return list<Token> */
     public const MAX_TEMPLATE_BYTES = 1_048_576;
 
+    /**
+     * Known directives (longest first). A match requires a non-identifier
+     * boundary so @emptyNONE is tokenized as @empty + text "NONE".
+     *
+     * @var list<string>
+     */
+    private const DIRECTIVES = [
+        'endcomponent', 'endforelse', 'endforeach', 'endsection', 'endswitch',
+        'endisset', 'endempty', 'endwhile', 'endpush', 'endslot', 'endfor', 'endif',
+        'component', 'foreach', 'forelse', 'extends', 'section', 'default', 'elseif',
+        'continue', 'include', 'switch', 'isset', 'empty', 'while', 'break', 'else',
+        'case', 'push', 'slot', 'stack', 'yield', 'for', 'if', 'set',
+    ];
+
+    /** @return list<Token> */
     public function tokenize(string $source): array
     {
         if (strlen($source) > self::MAX_TEMPLATE_BYTES) {
@@ -42,9 +56,10 @@ final class TemplateLexer
             } elseif (substr($source, $offset, 2) === '{!') {
                 $kind = 'raw_echo';
                 $openLength = 2;
-            } elseif ($source[$offset] === '@' && preg_match('/\G@([A-Za-z_][A-Za-z0-9_]*)/A', $source, $m, 0, $offset)) {
+            } elseif ($source[$offset] === '@' && ($directiveMatch = $this->matchDirective($source, $offset)) !== null) {
                 $kind = 'directive';
-                $openLength = strlen($m[0]);
+                $openLength = $directiveMatch['length'];
+                $m = [1 => $directiveMatch['name']];
             }
 
             if ($kind === null) {
@@ -110,6 +125,25 @@ final class TemplateLexer
 
         $tokens[] = $this->token('eof', '', $source, $length);
         return $tokens;
+    }
+
+    /**
+     * Longest known directive prefix wins (e.g. @elseif before @else,
+     * @empty before treating "@emptyNONE" as an unknown token).
+     *
+     * @return array{name:string,length:int}|null
+     */
+    private function matchDirective(string $source, int $offset): ?array
+    {
+        foreach (self::DIRECTIVES as $name) {
+            $candidate = '@' . $name;
+            $candidateLength = strlen($candidate);
+            if (substr($source, $offset, $candidateLength) === $candidate) {
+                return ['name' => $name, 'length' => $candidateLength];
+            }
+        }
+
+        return null;
     }
 
     private function findClosingDelimiter(string $source, int $start, string $close): ?int

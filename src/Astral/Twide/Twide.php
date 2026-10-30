@@ -108,7 +108,7 @@ final class Twide implements TemplateEngineInterface
 
     private function compiledPath(string $template, string $source): string
     {
-        $signature = hash('sha256', $template . "\0" . $source . "\0" . PHP_VERSION_ID . "\0twide-0.1-phase-13");
+        $signature = hash('sha256', $template . "\0" . $source . "\0" . PHP_VERSION_ID . "\0twide-0.1-complement-p4");
         return rtrim($this->config->cachePath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $signature . '.php';
     }
 

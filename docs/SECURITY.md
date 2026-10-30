@@ -8,7 +8,8 @@
 - L'accès à un objet via `user.name` se limite aux propriétés publiques visibles par `get_object_vars()`. Twide n'appelle pas automatiquement les méthodes ou les getters.
 - Les noms de templates sont résolus sous la racine de vues configurée. Les chemins absolus, segments `.` / `..` et échappements via liens symboliques sont refusés.
 - Les templates et le cache compilé doivent être considérés comme des artefacts de confiance. Le répertoire de cache doit être hors de la racine publique du serveur web et accessible uniquement au compte de l'application.
-- Les fonctions et filtres enregistrés sont du code PHP de l'application. Ils ne doivent jamais être construits à partir de données utilisateur non fiables.
+- Les fonctions et filtres enregistrés (dont `twide.extensions`) sont du code PHP de l'application. Ils ne doivent jamais être construits à partir de données utilisateur non fiables.
+- `@while` / conditions : uniquement des expressions Twide et fonctions **enregistrées**, jamais du PHP libre.
 
 ## Limites actuelles
 

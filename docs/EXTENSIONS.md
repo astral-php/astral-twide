@@ -1,8 +1,22 @@
-# Extensions officielles de Twide
+# Extensions Twide
 
 ## Enregistrer une extension
 
-Les extensions implémentent `Astral\Twide\Contracts\ExtensionInterface` et retournent des tableaux de fonctions et de filtres. Elles s'enregistrent explicitement :
+Les extensions implémentent `Astral\Twide\Contracts\ExtensionInterface` et exposent des fonctions / filtres.
+
+### Via `config/app.php` (recommandé en app Astral)
+
+```php
+'twide' => [
+    'extensions' => [
+        \App\Twide\ShopExtension::class,
+    ],
+],
+```
+
+`TwideServiceProvider` résout chaque FQCN (autowiring container) et refuse les classes absentes ou non conformes avec un message explicite. **Pas de scan de dossier.**
+
+### Manuellement (moteur autonome)
 
 ```php
 use Astral\Twide\Extension\UtilitiesExtension;
@@ -14,9 +28,33 @@ $twide = new Twide([
 ]);
 
 $twide->addExtension(new UtilitiesExtension());
+$twide->addExtension(new \App\Twide\ShopExtension());
 ```
 
-Les noms exposés par une extension doivent être uniques, sauf si le remplacement est explicitement autorisé avec le second argument `true`.
+Les noms exposés doivent être uniques, sauf remplacement explicite (`addExtension(..., true)` / `addFilter(..., true)`).
+
+### Tests PHPUnit (fortement conseillé)
+
+Pour chaque extension applicative, couvrir au minimum :
+
+1. Enregistrement des noms de fonctions / filtres attendus  
+2. Rendu d’un `.twide` minimal qui les utilise  
+3. Collision de nom (comportement avec / sans `replace`)  
+4. Cas d’erreur (argument invalide) si l’extension valide ses entrées  
+
+Exemple de squelette :
+
+```php
+final class ShopExtensionTest extends TestCase
+{
+    public function testFilterIsAvailableInTemplate(): void
+    {
+        $engine = new Twide(['views' => $this->views, 'cache' => $this->cache]);
+        $engine->addExtension(new ShopExtension());
+        self::assertSame('…', $engine->render('shop/price', ['amount' => 10]));
+    }
+}
+```
 
 ## Extension `astral-utilities`
 
