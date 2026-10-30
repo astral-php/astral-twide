@@ -2,7 +2,7 @@
     "name": "astral-php/astral-twide",
     "description": "Moteur de templates compilé et composant optionnel d’intégration pour Astral PHP.",
     "type": "library",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "license": "MIT",
     "keywords": [
         "astral",

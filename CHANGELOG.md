@@ -1,8 +1,8 @@
 # Changelog — astral-twide
 
-## [0.1.0] — 2026-10-30
+## [1.0.0] — 2026-10-30
 
-Première release Packagist feuille 2.x — moteur de templates **opt-in** pour Astral MVC.
+Première release stable Packagist feuille 2.x — moteur de templates **opt-in** pour Astral MVC.
 
 ### Added
 
