@@ -111,8 +111,9 @@ Détails : [`docs/SECURITY.md`](docs/SECURITY.md).
 
 | Doc | Rôle |
 |-----|------|
-| [`docs/ASTRAL-TWIDE-GUIDE-VUES.md`](docs/ASTRAL-TWIDE-GUIDE-VUES.md) | Référence auteur de vues |
+| [`docs/ASTRAL-TWIDE-GUIDE-VUES.md`](docs/ASTRAL-TWIDE-GUIDE-VUES.md) | Référence auteur de vues (P1–P5) |
 | [`docs/ASTRAL-MVC-INTEGRATION.md`](docs/ASTRAL-MVC-INTEGRATION.md) | Provider + contrôleur |
 | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Install |
 | [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) | Extensions |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Sécurité |
+| [`docs/DEBUG.md`](docs/DEBUG.md) | Messages d’erreur / debug |

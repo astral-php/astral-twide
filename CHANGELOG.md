@@ -12,7 +12,7 @@
 - Tableaux associatifs d’expressions `['k' => v]`
 - Messages d’erreur localisés : `Twide: … (template "…", line N, column M)`
 - Lexer : matching des directives connues (plus long préfixe)
-- Docs : `DEBUG.md`, extensions app + tests PHPUnit conseillés
+- Docs : `DEBUG.md`, guide vues aligné P1–P5, extensions app + tests PHPUnit conseillés
 
 ### Changed
 

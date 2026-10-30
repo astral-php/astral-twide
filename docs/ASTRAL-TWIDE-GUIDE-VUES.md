@@ -2,17 +2,26 @@
 
 **Package :** `astral-php/astral-twide`  
 **Cible :** Astral MVC 2.x (`PHP ^8.3`, `astral-core ^2`), intégration optionnelle via `TwideServiceProvider`  
-**Statut :** référence des fonctionnalités industrialisées (Phase A). Certaines limites sont signalées explicitement.
+**Statut :** guide aligné sur le complément **P1–P5** (config, conditionnels, boucles, `@set`, includes enrichis).
 
-Ce guide explique comment écrire une vue HTML `.twide`, transmettre des données depuis un contrôleur, afficher des valeurs, utiliser les conditions et parcourir des collections, puis composer des layouts et composants.
+Ce guide explique comment écrire une vue HTML `.twide`, préparer les données dans le contrôleur, afficher des valeurs, utiliser conditions / boucles / composition, et personnaliser le moteur en sécurité.
+
+Docs liées : [`ASTRAL-MVC-INTEGRATION.md`](ASTRAL-MVC-INTEGRATION.md) · [`EXTENSIONS.md`](EXTENSIONS.md) · [`SECURITY.md`](SECURITY.md) · [`DEBUG.md`](DEBUG.md).
 
 ---
 
-## 1. Comment transmettre les données à une vue
+## 0. Philosophie Astral + Twide
 
-Les données sont transmises sous forme de tableau associatif au moteur Twide.
+- Les **apps Astral officielles** restent sur les **vues PHP natives**.
+- Twide est un moteur **opt-in** pour les projets qui le choisissent.
+- Préparer les données **dans le contrôleur** (tableaux / DTO plats). Les résultats BDD / ORM sont en général déjà des **arrays** ; si une classe métier est utilisée, **mapper** vers un tableau (ou n’exposer que des **propriétés publiques**) avant `$this->twide(...)`.
+- Twide **n’appelle pas** les méthodes ni les getters magiques sur les objets (`user.getName()` interdit). C’est volontaire (sécurité + clarté).
 
-Exemple côté contrôleur :
+---
+
+## 1. Transmettre des données à une vue
+
+Les données sont un **tableau associatif**.
 
 ```php
 return $this->twide('users/index', [
@@ -25,96 +34,75 @@ return $this->twide('users/index', [
 ]);
 ```
 
-Le nom `users/index` désigne ici le fichier `views/users/index.twide` avec la racine de vues Astral par défaut. Le provider Astral utilise `BASE_PATH/views` pour les vues et `BASE_PATH/storage/cache/views` pour le cache compilé.
-
-Exemple de vue `views/users/index.twide` :
+Le nom `users/index` → fichier `views/users/index.twide` (racine et suffixe configurables, voir §13).
 
 ```html
 <h1>{{ title }}</h1>
-
 <ul>
-    @for(user in users)
+    @foreach(users as user)
         <li>{{ user.name }} — {{ user.email }}</li>
-    @endfor
+    @endforeach
 </ul>
 ```
 
-Les clés du tableau transmis deviennent des variables de template. Pour une valeur comme `['user' => ['name' => 'Ada']]`, on peut écrire `{{ user.name }}`.
+Les clés du tableau deviennent des variables. Pour `['user' => ['name' => 'Ada']]` → `{{ user.name }}`.
 
 ---
 
-## 2. Balises d'affichage des données
+## 2. Affichage
 
-### 2.1 `{{ expression }}` — afficher une valeur avec échappement HTML
-
-C'est la forme à utiliser par défaut. Twide échappe les caractères HTML spéciaux pour limiter les risques d'injection HTML/XSS.
+### 2.1 `{{ expression }}` — échappement HTML (défaut)
 
 ```html
 <h1>{{ title }}</h1>
 <p>Bonjour {{ user.name }}.</p>
-<p>Prix : {{ product.price }} €</p>
 ```
 
-Si `title` contient `<script>`, le contenu est affiché comme du texte et non exécuté comme du HTML.
+Si `title` contient `<script>`, le contenu est affiché comme texte, pas exécuté.
 
-### 2.2 Accéder à une clé imbriquée
+### 2.2 Chemins et index
 
 ```html
 <p>{{ user.profile.firstName }}</p>
-<p>{{ user.profile.city }}</p>
+<p>{{ products[0].name }}</p>
+<p>{{ product['sku'] }}</p>
 ```
 
-L'accès par point fonctionne sur les tableaux associatifs et les propriétés publiques d'objets. Les méthodes et accesseurs magiques d'objets ne sont pas appelés.
+Fonctionne sur tableaux associatifs et **propriétés publiques** d’objets uniquement.
 
-### 2.3 Accéder à un élément par index ou clé
+### 2.3 Valeur absente ou `null`
 
-```html
-<p>Premier produit : {{ products[0].name }}</p>
-<p>Code : {{ product['sku'] }}</p>
-```
-
-### 2.4 Valeur absente ou `null`
-
-Une variable absente ou une valeur `null` est rendue comme une chaîne vide par `{{ ... }}`. Pour choisir un texte de remplacement, on peut utiliser le filtre `default` :
+`{{ ... }}` affiche une chaîne vide. Filtre `default` pour un remplacement si `null` :
 
 ```html
 <p>{{ user.nickname | default('Aucun surnom') }}</p>
 ```
 
-Attention : `default` remplace les valeurs `null` ; il ne constitue pas un test général de valeur vide, de chaîne vide ou de tableau vide.
-
-### 2.5 `{! expression !}` — sortie brute sans échappement
+### 2.4 `{! expression !}` — HTML brut
 
 ```html
-<div class="article-content">
-    {! trustedHtml !}
-</div>
+<div class="article-content">{! trustedHtml !}</div>
 ```
 
-Cette syntaxe n'échappe pas le HTML. Elle est réservée à du HTML de confiance ou préalablement assaini par l'application. **Ne jamais l'utiliser directement avec du contenu fourni par un utilisateur.**
+**Réservé** au HTML de confiance ou déjà assaini. Jamais du contenu utilisateur brut.
 
-### 2.6 `{{-- commentaire --}}` — commentaire de template
+### 2.5 Commentaires
 
 ```twide
-{{-- Ce commentaire ne sera pas affiché dans le HTML final. --}}
-<h1>{{ title }}</h1>
+{{-- Invisible dans le HTML final. --}}
+```
+
+### 2.6 Tableaux littéraux dans les expressions
+
+```twide
+@include('partials/input' with ['type' => 'text', 'name' => 'email'])
 ```
 
 ---
 
 ## 3. Conditions
 
-### 3.1 `@if`, `@else`, `@endif`
-
-```twide
-@if(isAdmin)
-    <a href="/admin">Administration</a>
-@else
-    <p>Espace utilisateur</p>
-@endif
-```
-
-### 3.2 `@elseif`
+### 3.1 `@if` / `@elseif` / `@else` / `@endif`
 
 ```twide
 @if(status == 'published')
@@ -126,414 +114,302 @@ Cette syntaxe n'échappe pas le HTML. Elle est réservée à du HTML de confianc
 @endif
 ```
 
-### 3.3 Tester un nombre ou une collection vide
+### 3.2 `@isset` / `@endisset`
 
-La directive `@empty` **n'est pas implémentée dans la phase 13**. Pour une collection, utiliser la fonction intégrée `count()` avec `@if` :
-
-```twide
-@if(count(products) == 0)
-    <p>Aucun produit à afficher.</p>
-@else
-    <p>{{ count(products) }} produit(s) disponible(s).</p>
-@endif
-```
-
-Pour une valeur textuelle, tester explicitement la chaîne attendue si nécessaire :
+Vrai si le chemin est **défini et non `null`**.
 
 ```twide
-@if(title == '')
-    <p>Le titre n'est pas renseigné.</p>
-@else
-    <h1>{{ title }}</h1>
-@endif
+@isset(user)
+    <p>{{ user.name }}</p>
+@endisset
+
+@isset(user.email)
+    <a href="mailto:{{ user.email }}">{{ user.email }}</a>
+@endisset
 ```
 
-### 3.4 Opérateurs utilisables dans les expressions
+### 3.3 `@empty` / `@endempty` (standalone)
 
-Les opérateurs actuellement pris en charge incluent :
-
-- comparaison : `==`, `!=`, `===`, `!==`, `<`, `>`, `<=`, `>=` ;
-- logique : `&&`, `||`, `!` ;
-- arithmétique : `+`, `-`, `*`, `/`, `%`, `**` ;
-- valeur de remplacement si `null` : `??` ;
-- expression ternaire : `condition ? valeurSiVrai : valeurSiFaux`.
-
-Exemples :
+Sémantique proche de `empty()` PHP (absent, `null`, `''`, `0`, `[]`, …).
 
 ```twide
-@if(isAdmin && user.active)
-    <p>Compte administrateur actif.</p>
-@endif
-
-@if(order.total >= 100)
-    <p>Livraison offerte.</p>
-@endif
-
-<p>{{ nickname ?? 'Visiteur' }}</p>
-<p>{{ isAdmin ? 'Administrateur' : 'Utilisateur' }}</p>
+@empty(users)
+    <p>Aucun utilisateur.</p>
+@endempty
 ```
 
-Les expressions sont limitées au langage pris en charge par Twide : il ne s'agit pas de PHP arbitraire et on ne peut pas appeler directement n'importe quelle méthode PHP.
+> **Attention :** bare `@empty` (sans arguments) n’est valide que dans un `@forelse` (§4.3).  
+> Standalone → toujours `@empty(expr) … @endempty`.
+
+### 3.4 `@switch` / `@case` / `@default` / `@endswitch`
+
+```twide
+@switch(status)
+@case('actif')
+    Actif
+    @break
+@case('inactif')
+    Inactif
+    @break
+@default
+    Inconnu
+@endswitch
+```
+
+Utiliser `@break` dans chaque `@case` pour éviter le fall-through PHP.
+
+### 3.5 Opérateurs d’expression
+
+- comparaison : `==`, `!=`, `===`, `!==`, `<`, `>`, `<=`, `>=`
+- logique : `&&`, `||`, `!`
+- arithmétique : `+`, `-`, `*`, `/`, `%`, `**`
+- null-coalesce : `??`
+- ternaire : `condition ? a : b`
+
+Pas de PHP arbitraire dans les expressions.
 
 ---
 
-## 4. Parcourir une collection : `@for(item in items)`
+## 4. Boucles
 
-### Important : `@for` est une boucle de parcours, pas une boucle PHP classique
-
-La syntaxe implémentée est :
+### 4.1 `@for(item in items)` — parcours (historique Twide)
 
 ```twide
 @for(product in products)
-    <p>{{ product.name }}</p>
+    <li>{{ product.name }} — {{ product.price }} €</li>
 @endfor
 ```
 
-Elle parcourt un tableau ou un objet `Traversable`. Dans son usage, elle ressemble à un `foreach` PHP, mais **la directive s'appelle `@for` dans Twide**.
+Équivalent d’usage à un `foreach` PHP sur un tableau / `Traversable`.
 
-Les syntaxes suivantes ne sont pas prises en charge dans la phase 13 :
-
-```text
-@foreach(product in products) ... @endforeach
-@for($i = 0; $i < 10; $i++) ... @endfor
-```
-
-### 4.1 Exemple HTML complet
-
-```html
-<h1>Nos produits</h1>
-
-<ul>
-    @for(product in products)
-        <li>
-            <strong>{{ product.name }}</strong>
-            — {{ product.price }} €
-        </li>
-    @endfor
-</ul>
-```
-
-### 4.2 Métadonnées de boucle
-
-Twide fournit la variable réservée `loop` à l'intérieur d'une boucle :
-
-| Propriété | Signification | Exemple |
-|---|---|---|
-| `loop.index` | Position à partir de 1 | `{{ loop.index }}` |
-| `loop.index0` | Position à partir de 0 | `{{ loop.index0 }}` |
-| `loop.first` | `true` sur le premier élément | `@if(loop.first)` |
-| `loop.last` | `true` sur le dernier élément | `@if(loop.last)` |
-| `loop.length` | Nombre total d'éléments | `{{ loop.length }}` |
-| `loop.key` | Clé ou index courant | `{{ loop.key }}` |
-| `loop.parent` | Métadonnées de la boucle extérieure | `loop.parent.index` |
-
-Exemple :
-
-```html
-<ol>
-    @for(user in users)
-        <li>
-            {{ loop.index }} / {{ loop.length }} — {{ user.name }}
-
-            @if(loop.first)
-                <span>(premier)</span>
-            @endif
-
-            @if(loop.last)
-                <span>(dernier)</span>
-            @endif
-        </li>
-    @endfor
-</ol>
-```
-
-### 4.3 Parcours imbriqués
+### 4.2 `@foreach` — syntaxe étendue
 
 ```twide
-@for(category in categories)
-    <h2>{{ category.name }}</h2>
+@foreach(users as user)
+    <p>{{ user.name }}</p>
+@endforeach
 
-    <ul>
-        @for(product in category.products)
-            <li>
-                {{ loop.parent.index }}.{{ loop.index }}
-                — {{ product.name }}
-            </li>
-        @endfor
-    </ul>
+@foreach(users as key => user)
+    <p>#{{ key }} — {{ user.name }}</p>
+@endforeach
+
+@foreach(users as user if user.active)
+    <p>{{ user.name }}</p>
+@endforeach
+```
+
+### 4.3 `@forelse` / `@empty` / `@endforelse`
+
+```twide
+@forelse(products as product)
+    <li>{{ product.name }}</li>
+@empty
+    <p>Aucun produit.</p>
+@endforelse
+```
+
+Ici `@empty` est **sans arguments** (branche vide du forelse).
+
+### 4.4 `@for(i in start count n)` — plage
+
+`n` = **nombre d’itérations** à partir de `start` (pas une boucle C `for($i=…)`).
+
+```twide
+@for(i in 0 count 3)
+    <span>{{ i }}</span>
+@endfor
+{{-- 0 1 2 --}}
+
+@for(page in 1 count totalPages)
+    <a href="?p={{ page }}">{{ page }}</a>
 @endfor
 ```
 
-`loop.parent.index` fait référence à l'index de la boucle extérieure.
+### 4.5 `@while`
 
-### 4.4 Afficher un message si la collection est vide
-
-Comme `@empty` n'est pas pris en charge, vérifier la collection avant la boucle :
+Condition = expression Twide / fonctions **enregistrées** uniquement.
 
 ```twide
-@if(count(products) == 0)
-    <p>Aucun produit pour le moment.</p>
-@else
-    <ul>
-        @for(product in products)
-            <li>{{ product.name }}</li>
-        @endfor
-    </ul>
-@endif
+@while(cursor < max)
+    <p>{{ cursor }}</p>
+    @set(cursor = cursor + 1)
+@endwhile
 ```
 
-La fonction `count()` est une fonction Twide intégrée. Elle renvoie le nombre d'éléments d'une valeur comptable et `0` si la valeur ne l'est pas.
+### 4.6 `@break` / `@continue`
+
+Autorisés **uniquement** dans une boucle (`@for`, `@foreach`, `@forelse`, `@while`) ; `@break` aussi dans `@switch`.
+
+```twide
+@foreach(nums as n)
+    @if(n == 2)
+        @continue
+    @endif
+    @if(n == 4)
+        @break
+    @endif
+    {{ n }};
+@endforeach
+```
+
+### 4.7 Métadonnées `loop`
+
+| Propriété | Signification |
+|-----------|----------------|
+| `loop.index` | Position depuis 1 |
+| `loop.index0` | Position depuis 0 |
+| `loop.first` / `loop.last` | booléens |
+| `loop.length` | taille |
+| `loop.key` | clé courante |
+| `loop.parent` | métadonnées de la boucle parente |
+
+Le nom de variable `loop` est **réservé**.
 
 ---
 
-## 5. Fonctions intégrées
+## 5. `@set` — variables locales au rendu
 
-Les fonctions doivent être enregistrées dans le moteur avant d'être appelées. Les fonctions suivantes sont intégrées dans Twide :
-
-| Fonction | Exemple | Utilité |
-|---|---|---|
-| `count(value)` | `{{ count(products) }}` | Nombre d'éléments comptables |
-| `upper(value)` | `{{ upper(title) }}` | Conversion en majuscules |
-| `lower(value)` | `{{ lower(title) }}` | Conversion en minuscules |
-
-Exemple :
-
-```html
-<p>{{ upper(title) }}</p>
-<p>Nombre de produits : {{ count(products) }}</p>
+```twide
+@set(title = 'Mon titre')
+@set(total = price * quantity)
+<p>{{ title }} — {{ total }}</p>
 ```
 
-`upper()` et `lower()` utilisent les fonctions PHP de conversion de casse standard. Pour des besoins Unicode avancés, vérifier les extensions et fonctions disponibles dans l'environnement.
+Ne pas `@set(loop = …)`.
 
 ---
 
-## 6. Filtres
+## 6. Fonctions et filtres
 
-Un filtre se place après la valeur avec `|`. Certains acceptent des arguments.
+### 6.1 Fonctions intégrées
 
-### 6.1 Filtres intégrés
+| Fonction | Exemple |
+|----------|---------|
+| `count(value)` | `{{ count(products) }}` |
+| `upper(value)` | `{{ upper(title) }}` |
+| `lower(value)` | `{{ lower(title) }}` |
 
-| Filtre | Exemple | Utilité |
-|---|---|---|
-| `upper` | `{{ title \| upper }}` | Majuscules |
-| `lower` | `{{ title \| lower }}` | Minuscules |
-| `trim` | `{{ name \| trim }}` | Retire les espaces aux extrémités |
-| `default('texte')` | `{{ nickname \| default('Visiteur') }}` | Remplace `null` |
-| `length` | `{{ products \| length }}` | Taille d'une chaîne ou d'une valeur comptable |
-
-Exemples :
-
-```html
-<h1>{{ title | upper }}</h1>
-<p>{{ user.name | trim }}</p>
-<p>{{ user.nickname | default('Visiteur') }}</p>
-<p>{{ products | length }} produit(s)</p>
-```
-
-### 6.2 Filtres fournis par `UtilitiesExtension`
-
-Dans l'intégration Astral de la phase 13, le provider enregistre `UtilitiesExtension`. En utilisation autonome, ajouter explicitement cette extension au moteur.
+### 6.2 Filtres intégrés
 
 | Filtre | Exemple |
-|---|---|
-| `slug` | `{{ title \| slug }}` |
-| `truncate(80)` | `{{ description \| truncate(80) }}` |
-| `excerpt(30)` | `{{ description \| excerpt(30) }}` |
-| `ascii` | `{{ title \| ascii }}` |
-| `date('d/m/Y')` | `{{ createdAt \| date('d/m/Y') }}` |
-| `diff_for_humans` | `{{ createdAt \| diff_for_humans }}` |
-| `arr_get('profile.email', '')` | `{{ user \| arr_get('profile.email', '') }}` |
-| `arr_only(['id', 'name'])` | `{{ data \| arr_only(['id', 'name']) }}` |
-| `arr_except(['password'])` | `{{ data \| arr_except(['password']) }}` |
-| `flatten` | `{{ nested \| flatten }}` |
+|--------|---------|
+| `upper` / `lower` / `trim` | `{{ title \| upper }}` |
+| `default('…')` | `{{ nickname \| default('Visiteur') }}` |
+| `length` | `{{ products \| length }}` |
 
-Exemples pratiques :
+### 6.3 `UtilitiesExtension` (provider Astral)
 
-```html
-<a href="/articles/{{ title | slug }}">{{ title }}</a>
-<p>{{ description | truncate(120) }}</p>
-<p>Publié le {{ createdAt | date('d/m/Y') }}</p>
-<p>Adresse : {{ user | arr_get('profile.email', '') }}</p>
-```
+Enregistrée automatiquement par `TwideServiceProvider`. En autonome : `$twide->addExtension(new UtilitiesExtension())`.
 
-Les filtres de transformation de tableaux renvoient des tableaux : ne pas les afficher directement comme du texte. Utiliser leur résultat dans une fonction adaptée ou préparer les données dans le contrôleur.
-
-Le filtre `truncate` nécessite l'extension PHP `mbstring`.
+Filtres utiles : `slug`, `truncate(80)`, `excerpt(30)`, `ascii`, `date('d/m/Y')`, `diff_for_humans`, `arr_get`, `arr_only`, `arr_except`, `flatten`.  
+Détail : [`EXTENSIONS.md`](EXTENSIONS.md). `truncate` nécessite `ext-mbstring`.
 
 ---
 
-## 7. Composer les vues
+## 7. Composition des vues
 
-Les directives de composition utilisent des noms de templates et de sections **statiques**, entre guillemets. Les arguments dynamiques pour `@include` ne sont pas pris en charge dans cette version.
+Noms de templates / sections **statiques** (guillemets). Pas de nom d’include calculé dynamiquement.
 
-### 7.1 Layout : `@extends`
-
-Dans `views/layouts/base.twide` :
-
-```html
-<!doctype html>
-<html lang="fr">
-<head>
-    <meta charset="utf-8">
-    <title>@yield('title', 'Mon site')</title>
-</head>
-<body>
-    <header><a href="/">Mon site</a></header>
-    <main>
-        @yield('content')
-    </main>
-</body>
-</html>
-```
-
-Dans `views/products/index.twide` :
+### 7.1 Layout : `@extends` / `@section` / `@yield`
 
 ```twide
 @extends('layouts/base')
 
 @section('title')
-Catalogue des produits
+Catalogue
 @endsection
 
 @section('content')
-    <h1>Nos produits</h1>
-    @for(product in products)
-        <p>{{ product.name }}</p>
-    @endfor
+    <h1>Produits</h1>
 @endsection
 ```
 
-`@yield('title', 'Mon site')` affiche le contenu de la section `title`, ou le texte de secours si aucune section n'est définie.
-
-### 7.2 Inclure un fragment : `@include`
-
-Dans `views/partials/notice.twide` :
-
-```html
-<aside class="notice">
-    <strong>{{ title }}</strong>
-    <p>{{ message }}</p>
-</aside>
-```
-
-Dans une autre vue :
+### 7.2 `@include`
 
 ```twide
 @include('partials/notice')
 ```
 
-L'inclusion partage le contexte de données du rendu courant. La syntaxe actuelle n'accepte pas de tableau d'arguments dynamique dans `@include`.
+Partage le contexte courant.
 
-### 7.3 Composant et slot par défaut
+### 7.3 `@include … with` — contexte additionnel
 
-Dans `views/components/card.twide` :
+Fusionne un **tableau** ou les **propriétés publiques** d’un objet dans le contexte le temps du partial, puis restaure.
 
-```html
-<article class="card">
-    <div class="card__body">
-        @yield('slot')
-    </div>
-</article>
+```twide
+@include('partials/input' with ['type' => 'text', 'name' => 'email'])
+
+@include('user/profile' with user)
 ```
 
-Utilisation :
+### 7.4 `@each` — include répété
+
+```twide
+@each('user/card', users, 'user')
+
+@each('user/card', users, 'user', 'partials/empty')
+
+@each('user/card', users, 'user', 'raw|Aucun utilisateur')
+```
+
+- 3ᵉ argument = nom de variable **entre guillemets** (`'user'`).
+- 4ᵉ optionnel : autre template **ou** `'raw|texte'` (texte **échappé** HTML).
+
+Équivalent interne : `@forelse` + `@include` (+ branche vide).
+
+### 7.5 Composants, slots, piles
 
 ```twide
 @component('components/card')
-    <h2>{{ product.name }}</h2>
-    <p>{{ product.description }}</p>
-@endcomponent
-```
-
-Le contenu placé entre `@component` et `@endcomponent` devient le slot par défaut, accessible avec `@yield('slot')` dans le composant.
-
-### 7.4 Slots nommés
-
-Dans `views/components/panel.twide` :
-
-```html
-<section class="panel">
-    <header>@yield('heading')</header>
-    <div class="panel__body">@yield('slot')</div>
-</section>
-```
-
-Utilisation :
-
-```twide
-@component('components/panel')
     @slot('heading')
         <h2>{{ title }}</h2>
     @endslot
-
     <p>{{ message }}</p>
 @endcomponent
-```
-
-### 7.5 Ajouter du contenu à une pile : `@push` et `@stack`
-
-Dans un layout :
-
-```html
-<head>
-    <meta charset="utf-8">
-    @stack('head')
-</head>
-<body>
-    {{ title }}
-    @stack('scripts')
-</body>
-```
-
-Dans une vue :
-
-```twide
-@push('head')
-    <link rel="stylesheet" href="/assets/page.css">
-@endpush
 
 @push('scripts')
     <script src="/assets/page.js"></script>
 @endpush
 ```
 
-Les contenus poussés sont rassemblés au niveau des `@stack` portant le même nom. Le contenu des piles est du HTML : n'y placer que du contenu contrôlé par l'application.
+Layout : `@stack('scripts')`. Contenu des piles = HTML contrôlé par l’app.
 
 ---
 
-## 8. Personnaliser Twide côté PHP
+## 8. Personnaliser Twide (app)
 
-Une application peut enregistrer des fonctions, des filtres ou une extension. Exemple autonome :
+### 8.1 Config `config/app.php`
 
 ```php
-use Astral\Twide\Twide;
-
-$twide = new Twide([
+'twide' => [
     'views' => BASE_PATH . '/views',
     'cache' => BASE_PATH . '/storage/cache/views',
-]);
+    'extension' => '.twide',
+    'extensions' => [
+        \App\Twide\ShopExtension::class,
+    ],
+],
+```
 
+Voir [`ASTRAL-MVC-INTEGRATION.md`](ASTRAL-MVC-INTEGRATION.md) et [`EXTENSIONS.md`](EXTENSIONS.md).  
+**Conseillé :** tests PHPUnit pour chaque extension applicative.
+
+### 8.2 Fonction / filtre manuel
+
+```php
 $twide->addFunction(
     'price',
     static fn (float $amount): string => number_format($amount, 2, ',', ' ') . ' €'
 );
 ```
 
-Dans la vue :
-
-```html
-<p>{{ price(product.price) }}</p>
-```
-
-Dans une application Astral utilisant le `TwideServiceProvider` de la phase 13, préférer l'instance configurée et enregistrée dans le conteneur plutôt que de construire un second moteur dans chaque contrôleur.
-
-Ne jamais enregistrer une fonction ou un filtre dont le code provient directement d'un utilisateur final.
+Ne jamais enregistrer du code provenant d’un utilisateur final.
 
 ---
 
-## 9. Exemple complet de vue HTML
+## 9. Exemple complet
 
-Supposons que le contrôleur fournisse :
+Contrôleur (données déjà en arrays) :
 
 ```php
 return $this->twide('catalog/index', [
@@ -541,83 +417,91 @@ return $this->twide('catalog/index', [
     'isAdmin' => true,
     'products' => [
         ['name' => 'Clavier', 'price' => 49.9, 'active' => true],
-        ['name' => 'Écran', 'price' => 199.0, 'active' => true],
+        ['name' => 'Écran', 'price' => 199.0, 'active' => false],
     ],
 ]);
 ```
 
-Fichier `views/catalog/index.twide` :
+`views/catalog/index.twide` :
 
 ```html
 <!doctype html>
 <html lang="fr">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title }}</title>
 </head>
 <body>
-    <header>
-        <h1>{{ title }}</h1>
-        @if(isAdmin)
-            <a href="/admin/products">Gérer les produits</a>
-        @endif
-    </header>
+    <h1>{{ title }}</h1>
+    @if(isAdmin)
+        <a href="/admin/products">Gérer</a>
+    @endif
 
-    <main>
-        @if(count(products) == 0)
-            <p>Aucun produit disponible.</p>
-        @else
-            <p>{{ count(products) }} produit(s) au catalogue.</p>
-            <ul>
-                @for(product in products)
-                    @if(product.active)
-                        <li>
-                            <strong>{{ product.name }}</strong>
-                            — {{ product.price }} €
-                            <small>Article {{ loop.index }} sur {{ loop.length }}</small>
-                        </li>
-                    @endif
-                @endfor
-            </ul>
+    @forelse(products as product)
+        @if(product.active)
+            <p>{{ loop.index }}. {{ product.name }} — {{ product.price }} €</p>
         @endif
-    </main>
+    @empty
+        <p>Catalogue vide.</p>
+    @endforelse
 </body>
 </html>
 ```
 
----
-
-## 10. Syntaxes non prises en charge dans la phase 13
-
-Pour éviter toute ambiguïté, les éléments suivants ne font pas partie de la syntaxe actuellement implémentée :
-
-- `@foreach ... @endforeach` : utiliser `@for(item in items) ... @endfor`.
-- `@empty` : tester la taille avec `@if(count(items) == 0)`.
-- boucle PHP indexée `@for($i = 0; ...)` : préparer les données côté contrôleur ou parcourir une collection avec `@for(item in items)`.
-- `@switch`, `@case`, `@while`, `@break`, `@continue` : non implémentés.
-- exécution de PHP arbitraire dans une vue : non autorisée.
-- appels directs de méthodes d'objets : non autorisés.
-- `@include('partial', ['foo' => bar])` ou nom d'inclusion calculé dynamiquement : non pris en charge.
-- syntaxe Twig ou Blade exacte : non garantie ; Twide possède sa propre grammaire.
-
-La syntaxe est appelée à évoluer. Ce document décrit les fonctionnalités présentes dans le package de la phase 13 et devra être mis à jour lorsque de nouvelles directives seront réellement implémentées et testées.
+Pour « uniquement les actifs » avec une branche vide cohérente, **filtrer dans le contrôleur** (recommandé) puis `@forelse(activeProducts as product)`. Le clause `if` existe sur `@foreach`, pas sur `@forelse`.
 
 ---
 
-## 11. Règles de sécurité essentielles
+## 10. Débogage
 
-1. Utiliser `{{ value }}` pour afficher une valeur textuelle : l'échappement HTML est automatique.
-2. Réserver `{! html !}` au HTML fiable ou assaini.
-3. Ne pas considérer les données préparées par le contrôleur comme sûres par défaut ; l'échappement reste important.
-4. Garder les fichiers compilés dans `storage/cache/views`, hors de la racine publique, avec des permissions adaptées.
-5. Ne jamais donner à un utilisateur la possibilité d'enregistrer ses propres fonctions PHP dans le moteur.
-6. Ne pas supposer qu'un objet peut être exploré librement : Twide ne lit que ses propriétés publiques.
-7. Tester les templates et la composition avec les versions réelles de PHP, Astral et `astral-utilities` utilisées par l'application.
+Les erreurs de syntaxe suivent :
 
-## 12. Vérifications de référence
+```text
+Twide: <message> (template "<nom>", line <n>, column <m>).
+```
 
-Avant de considérer une fonctionnalité comme stable dans un projet :
+Exemples : `Missing @endif for @if`, `Invalid @foreach syntax`, `@break is only allowed inside a loop…`.
+
+Activer `debug` en local ; en prod, journaliser l’exception et ne pas exposer les chemins serveur dans la page publique. Détail : [`DEBUG.md`](DEBUG.md).
+
+---
+
+## 11. Hors scope / non supporté (volontaire)
+
+| Sujet | Alternative |
+|-------|-------------|
+| Appels de méthodes / getters dans la vue | Mapper en array / props publiques dans le contrôleur |
+| PHP arbitraire dans `.twide` | Logique dans le contrôleur / services |
+| `@for($i = 0; $i < n; $i++)` style C | `@for(i in 0 count n)` ou collection préparée |
+| Nom d’`@include` dynamique | Noms statiques uniquement |
+| Compatibilité syntaxe Blade/Twig exacte | Grammaire Twide dédiée |
+
+---
+
+## 12. Sécurité (rappel)
+
+1. `{{ }}` par défaut ; `{! !}` seulement si confiance.  
+2. Cache `storage/cache/views` hors webroot.  
+3. Templates = artefacts de confiance ; chemins sous la racine `views`.  
+4. Extensions / filtres = code applicatif uniquement.  
+5. `'raw|…'` dans `@each` est échappé ; ce n’est pas du HTML brut.
+
+Voir [`SECURITY.md`](SECURITY.md).
+
+---
+
+## 13. Chemins par défaut
+
+| Clé | Défaut |
+|-----|--------|
+| `twide.views` | `BASE_PATH/views` |
+| `twide.cache` | `BASE_PATH/storage/cache/views` |
+| `twide.extension` | `.twide` |
+| `twide.extensions` | `[]` |
+
+---
+
+## 14. Vérifications
 
 ```bash
 composer validate
@@ -625,6 +509,6 @@ composer install
 composer test
 ```
 
-Puis vérifier au minimum le rendu simple, l'échappement HTML, les conditions, les boucles imbriquées, les layouts, les inclusions, les composants, les slots, les piles et les chemins de cache dans l'application Astral réelle.
+Vérifier ensuite dans une app réelle : échappement, conditions, boucles, layouts, includes/`with`/`each`, cache, messages d’erreur.
 
-**Rappel de philosophie :** le rendu PHP natif reste le choix historique et le plus direct dans Astral. Twide est un composant facultatif qui apporte une syntaxe de vue dédiée aux équipes qui la préfèrent.
+**Rappel :** le rendu PHP natif reste le choix historique Astral. Twide est un composant facultatif pour les équipes qui veulent une syntaxe de vues dédiée.
